@@ -2,9 +2,7 @@ from airflow import DAG
 from airflow.operators.python import PythonOperator
 from etl_process import extract_data, transform_data, load_data, fact_balance_sheet
 import pandas as pd
-from sqlalchemy import create_engine
 from datetime import datetime
-import os
 
 
 default_args = {

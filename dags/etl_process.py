@@ -1,6 +1,5 @@
 import os
 import pandas as pd
-from sqlalchemy import create_engine
 from datetime import datetime
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 
