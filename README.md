@@ -18,6 +18,17 @@
   - **Fact Table**: `fact_balance_sheet` for calculated data.
 - **Schema Design**: Includes auto-incrementing primary keys and handling of conflicts using `ON CONFLICT` statements to ensure data integrity.
 
+### Dataset & Processing
+- **Dataset**: given dataset I renamed it becomes dataset.xlsx and store in the folder data. In the container will be copied to opt/airflow/data.
+- **Processing**: There are 4 processing here:
+    - 1. extract dataset from the airflow container in the data folder and send to xcom to processing data in the next step. Store the data in csv files processing the data using pandas dataframe
+    - 2. Transform data consist of standardizing the name of the column, change data type, fill in the null value in the numeric column, replace it with 0, so we can do calculations
+    - 3. Load data into postgresql, create table if not exists then insert data using on conflict for update. We named the table balance_sheet
+    - 4. fact balance sheet is the calculated table to aggregate all number and using latest balance sheet based on date. load the data into postgresql
+    - 5. dag file is etl_dag.py for processing etl using etl_process.py
+    - 6. Job run every 2 hours that I implement in etl_dag.py with schedule_interval variable
+    - 7. start date I defined now because it's too messy if I run with specific date because it will be run every 2 hours.
+
 ### Insights from Resulting Datasets
 - Adjustments to data types and removal of unnecessary columns are performed to streamline the dataset.
 - Detailed date handling (e.g., using timestamps) facilitates easier sorting and analysis.
@@ -29,7 +40,13 @@
 - Install Python, Docker, and PostgreSQL on your local machine.
 
 ### Build Docker Image
-docker build -t <your-image-name> .
+docker build -t  .
+
+### Initialize run database Inti
+docker-compose run --rm webserver airflow db init
+
+### Docker Compose
+docker-compose up -d
 
 ### Access Airflow:
 
@@ -46,7 +63,23 @@ docker build -t <your-image-name> .
   - Schema: postgres
   - Password: postgres
   - Port: 5432
-  - Username: postgres
+  - login: postgres
+
+- If you have any problem with the login:
+    - Reset the Airflow Password
+- If you suspect an issue with the credentials, you can reset the Airflow admin password. Follow these steps:
+
+- Access the Airflow Webserver Container:
+docker-compose exec webserver /bin/bash
+
+- airflow users create \
+  --username admin \
+  --firstname Admin \
+  --lastname User \
+  --email admin@example.com \
+  --role Admin \
+  --password newpassword
+
 - Run the DAG:
 - Go to the home page in Airflow and trigger the etl_dag to start the ETL process.
 

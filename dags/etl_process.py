@@ -6,15 +6,30 @@ from airflow.providers.postgres.hooks.postgres import PostgresHook
 
 # Extract Data
 def extract_data(**kwargs):
-    data_dir = 'opt/airflow/data'
-    file_path = os.path.join(data_dir, '[Confidential] Mekari - Data Engineer Senior.xlsx')
+    data_dir = '/opt/airflow/data'
+    file_path = os.path.join(data_dir, 'dataset.xlsx')
+    
+    # Check if the file exists
+    if not os.path.isfile(file_path):
+        raise FileNotFoundError(f"The file {file_path} does not exist.")
+    
     df = pd.read_excel(file_path, engine='openpyxl')
-    return df
+    
+    output_path = os.path.join(data_dir, 'extracted_data.csv')
+    df.to_csv(output_path, index=False)
+    
+    kwargs['ti'].xcom_push(key='extracted_data_path', value=output_path)
+    
+    return output_path
 
 # Transform data
 def transform_data(**kwargs):
+    data_dir = '/opt/airflow/data'
     # using xcom to get the extracted data
-    df = kwargs['ti'].xcom_pull(task_ids='extract_data')
+    file_path = kwargs['ti'].xcom_pull(task_ids='extract_data', key='extracted_data_path')
+    
+    #read csv files from xcom
+    df = pd.read_csv(file_path)
     
     # Cleaning the header of the column
     df.columns = df.columns.str.lower().str.replace(' ', '_').str.replace('.', '_')
@@ -33,34 +48,57 @@ def transform_data(**kwargs):
     # add id auto increment
     df['id'] = range(1, len(df) + 1)
     
-    return df
+    transformed_path = os.path.join(data_dir, 'transformed_data.csv')
+    df.to_csv(transformed_path, index=False)
+    
+    kwargs['ti'].xcom_push(key='transformed_data_path', value=transformed_path)
+    
+    return transformed_path
 
 # Load Data
 def load_data(**kwargs):
-    df = kwargs['ti'].xcom_pull(task_ids='transform_data')
+    file_path = kwargs['ti'].xcom_pull(task_ids='transform_data', key='transformed_data_path')
+    
+    if not os.path.isfile(file_path):
+        raise FileNotFoundError(f"The file {file_path} does not exist.")
+    df = pd.read_csv(file_path)
     
     # connect to postgreSql
     pg_hook = PostgresHook(postgres_conn_id='local_postgres')
     conn = pg_hook.get_conn()
     cursor = conn.cursor()
     
-    # Create table
-    
-    create_table_query="""
-    CREATE TABLE IF NOT EXISTS balance_sheet(
-        id SERIAL PRIMARY KEY,
-        account_no INT,
-        date DATE,
-        transaction_details TEXT,
-        value_date DATE,
-        withdrawal_amt FLOAT,
-        deposit_amt FLOAT,
-        balance_amt FLOAT,
-        CONSTRAINT unique_balance UNIQUE (account_no, date, transaction_details)
+    # check table whether exists or not
+    check_table_exists_query = """
+    SELECT EXISTS (
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_schema = 'public'
+        AND table_name = 'balance_sheet'
     );
     """
     
-    cursor.execute(create_table_query)
+    # Create table
+    cursor.execute(check_table_exists_query)
+    table_exists = cursor.fetchone()[0]
+    
+    if not table_exists:       
+        create_table_query="""
+        CREATE TABLE IF NOT EXISTS balance_sheet(
+            id SERIAL PRIMARY KEY,
+            account_no BIGINT,
+            date DATE,
+            transaction_details TEXT,
+            value_date DATE,
+            withdrawal_amt DOUBLE PRECISION,
+            deposit_amt DOUBLE PRECISION,
+            balance_amt DOUBLE PRECISION,
+            CONSTRAINT unique_balance UNIQUE (account_no, date, transaction_details)
+        );
+        """
+        
+        cursor.execute(create_table_query)
+    
     
     # Insert df to postgres
     for index, row in df.iterrows():
@@ -90,7 +128,12 @@ def fact_balance_sheet(**kwargs):
     conn = pg_hook.get_conn()
     cursor = conn.cursor()
     
-    df=kwargs['ti'].xcom_pull(task_ids='transform_data')
+    file_path=kwargs['ti'].xcom_pull(task_ids='transform_data', key='transformed_data_path')
+    
+    if not os.path.isfile(file_path):
+        raise FileNotFoundError(f"The file {file_path} does not exist.")
+    
+    df = pd.read_csv(file_path)
     
     df['year']= pd.to_datetime(df['date']).dt.year
     df['month']= pd.to_datetime(df['date']).dt.month
@@ -115,24 +158,42 @@ def fact_balance_sheet(**kwargs):
                                 )
     summary_df.rename(columns={'balance_amt': 'ending_balance_amt'}, inplace=True)
     
+    summary_df['total_withdrawal_amt'] = summary_df['total_withdrawal_amt'].round(2)
+    summary_df['total_deposit_amt'] = summary_df['total_deposit_amt'].round(2)
+    summary_df['ending_balance_amt'] = summary_df['ending_balance_amt'].round(2)
+    
     #load summary 
     create_table_query="""
-    CREATE TABLE IF NOT EXISTS balance_sheet(
+    CREATE TABLE IF NOT EXISTS fact_balance_sheet(
         id SERIAL PRIMARY KEY,
-        account_no INT,
+        account_no BIGINT,
         year INT,
         month INT,
-        total_withdrawal_amt FLOAT,
-        total_deposit_amt FLOAT,
-        ending_balance_amt FLOAT
+        total_withdrawal_amt DOUBLE PRECISION,
+        total_deposit_amt DOUBLE PRECISION,
+        ending_balance_amt DOUBLE PRECISION
     );
     """
     
     cursor.execute(create_table_query)
     
+    # check table whether exists or not
+    check_table_exists_query = """
+    SELECT EXISTS (
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_schema = 'public'
+        AND table_name = 'fact_balance_sheet'
+    );
+    """
+    
+    cursor.execute(check_table_exists_query)
+    table_exists = cursor.fetchone()[0]
+    
     # Delete existing data
-    delete_query = "DELETE FROM fact_balance_sheet;"
-    cursor.execute(delete_query)
+    if table_exists:
+        delete_query = "DELETE FROM fact_balance_sheet;"
+        cursor.execute(delete_query)
     
     for index, row in summary_df.iterrows():
         insert_table_query="""

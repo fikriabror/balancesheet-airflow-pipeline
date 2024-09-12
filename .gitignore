@@ -1,3 +1,9 @@
 .DS_Store
 transform_test.ipynb
 ddl_table.py
+dags/__pycache__/
+logs/dag_id=etl_dag/
+logs/dag_processor_manager/
+logs/scheduler/
+data/extracted_data.csv
+data/transformed_data.csv

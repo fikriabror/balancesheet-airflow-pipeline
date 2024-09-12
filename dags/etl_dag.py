@@ -9,7 +9,7 @@ default_args = {
     'owner': 'fikri',
     'retries': 1,
     'catchup': False,
-    'start_date': datetime(2024, 9, 11),
+    'start_date': datetime.now(),
 }
 
 dag = DAG(
