@@ -32,7 +32,9 @@
 ### Insights from Resulting Datasets
 - Adjustments to data types and removal of unnecessary columns are performed to streamline the dataset.
 - Detailed date handling (e.g., using timestamps) facilitates easier sorting and analysis.
-- Analysis reveals that higher withdrawal amounts correlate with decreasing balances. Data insights suggest that withdrawals with minimal non-negative balances are less frequent.
+- Higher Withdrawals = Decreasing Balances: As account holders withdraw more money, the remaining balance in their account decreases. This is expected and aligns with the basic principle of withdrawals reducing account balance.
+- Deposit Irregularities: If deposits are irregular or insufficient, they cannot effectively offset the withdrawals. This inconsistency means that the balance might not stabilize as expected after withdrawals.
+- Financial Behavior Insights: Understanding that higher withdrawals lead to decreasing balances helps in predicting how account balances will change over time and can be useful for financial planning and customer behavior analysis.
 
 ## Setup and Running Instructions
 
